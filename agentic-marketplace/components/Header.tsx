@@ -118,22 +118,40 @@ export default function Header({ displayName, accountType, onMenuClick }: any) {
         }
 
         if (isSupplierFlow) {
+          // Supplier created the listing; buyer sent the invite; supplier accepted.
+          // sender_id = buyer, session.user.id = supplier
+          const { data: listing } = await supabase
+            .from('supplier_listings')
+            .select('user_id,organization_id')
+            .eq('id', notification.related_listing_id)
+            .maybeSingle()
+
           payload = {
             ...payload,
             listing_id: notification.related_listing_id,
-            buyer_org_id: notification.organization_id || null,
-            supplier_org_id: receiverOrgId || null,
             buyer_user_id: notification.sender_id,
-            supplier_user_id: session.user.id
+            buyer_org_id: notification.organization_id || null,
+            supplier_user_id: session.user.id,
+            supplier_org_id:
+              listing?.organization_id || receiverOrgId || null
           }
         } else {
+          // Buyer created the request; supplier sent the offer; buyer accepted.
+          // sender_id = supplier, session.user.id = buyer
+          const { data: request } = await supabase
+            .from('buyer_requests')
+            .select('user_id,organization_id')
+            .eq('id', notification.related_listing_id)
+            .maybeSingle()
+
           payload = {
             ...payload,
             request_id: notification.related_listing_id,
-            supplier_org_id: notification.organization_id || null,
-            buyer_org_id: receiverOrgId || null,
             supplier_user_id: notification.sender_id,
-            buyer_user_id: session.user.id
+            supplier_org_id: notification.organization_id || null,
+            buyer_user_id: session.user.id,
+            buyer_org_id:
+              request?.organization_id || receiverOrgId || null
           }
         }
 

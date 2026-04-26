@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react'
 import { useParams, usePathname } from 'next/navigation'
+import { supabase } from '@/lib/supabaseClient'
 import DashboardLayout from '@/components/DashboardLayout'
 import ProgressBar from '@/components/ProgressBar'
 
@@ -28,25 +29,61 @@ export default function AISummaryPage() {
     const runAnalysis = async () => {
       setLoading(true)
 
-      const mockContract = {
-        product: 'Shoes',
-        quantity: 100,
-        delivery_days: 7,
-        payment_terms: 'Escrow'
+      // Fetch contract data from Supabase
+      const { data: contractData, error: contractError } = await supabase
+        .from('contracts')
+        .select('*')
+        .eq('deal_id', dealId)
+        .maybeSingle()
+
+      if (contractError) {
+        console.error('Error fetching contract:', contractError)
+        setLoading(false)
+        return
       }
 
-      const mockEvents = [
-        { role: 'supplier', type: 'text', content: 'Shipment dispatched', created_at: '2026-04-20' },
-        { role: 'supplier', type: 'image', content: 'warehouse.jpg', created_at: '2026-04-21' },
-        { role: 'buyer', type: 'text', content: 'Received goods', created_at: '2026-04-23' }
-      ]
+      if (!contractData) {
+        console.error('No contract found for this deal')
+        setLoading(false)
+        return
+      }
+
+      // Fetch timeline events from Supabase
+      const { data: eventsData, error: eventsError } = await supabase
+        .from('deal_events')
+        .select('*')
+        .eq('deal_id', dealId)
+        .in('type', ['text', 'image'])
+        .order('created_at', { ascending: true })
+
+      if (eventsError) {
+        console.error('Error fetching events:', eventsError)
+        setLoading(false)
+        return
+      }
+
+      // Prepare contract object for AI
+      const contract = {
+        text: contractData.contract_text,
+        summary: contractData.summary,
+        risks: contractData.risks,
+        file_url: contractData.file_url
+      }
+
+      // Prepare events for AI
+      const events = eventsData?.map((event: any) => ({
+        role: event.role,
+        type: event.type,
+        content: event.content,
+        created_at: event.created_at
+      })) || []
 
       const res = await fetch('/api/ai/analyze-deal', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          contract: mockContract,
-          events: mockEvents
+          contract,
+          events
         })
       })
 
@@ -64,7 +101,7 @@ export default function AISummaryPage() {
     }
 
     runAnalysis()
-  }, [])
+  }, [dealId])
 
   return (
     <DashboardLayout>
